@@ -8,7 +8,7 @@
 
 #include <cstdlib>
 #include <cstring>
-
+#include<iostream>
 #include "linkers.h"
 
 namespace LightGBM {
@@ -112,10 +112,17 @@ void Network::AllreduceByAllGather(char* input, comm_size_t input_size, int type
 
   Allgather(input, block_start_.data(), block_len_.data(), buffer_.data(), all_size);
   for (int i = 1; i < num_machines_; ++i) {
+    //for(int j=0; j < input_size; ++j) {
+//	buffer_[block_start_[i] + j] = (buffer_[block_start_[i] + j] - 123 + 256) % 256 - 128;
+  //  }
+    std::cout<<"reduce start"<<std::endl;
     reducer(buffer_.data() + block_start_[i], buffer_.data() + block_start_[0], type_size, input_size);
+    std::cout<<"reduce end"<<std::endl;
   }
   // copy back
+  std::cout<<"copy start"<<std::endl;
   std::memcpy(output, buffer_.data(), input_size);
+  std::cout<<"copy end"<<std::endl;
 }
 
 void Network::Allgather(char* input, comm_size_t send_size, char* output) {
@@ -175,6 +182,7 @@ void Network::AllgatherBruck(char* input, const comm_size_t* block_start, const 
       need_recv_len += block_len[(rank_ + accumulated_block + j) % num_machines_];
     }
     // send and recv at same time
+    std::cout<<"AllgatherBruck"<<std::endl;
     linkers_->SendRecv(out_rank, output, need_send_len, in_rank, output + write_pos, need_recv_len);
     write_pos += need_recv_len;
     accumulated_block += cur_block_size;
@@ -188,6 +196,12 @@ void Network::AllgatherBruck(char* input, const comm_size_t* block_start, const 
 void Network::AllgatherRecursiveDoubling(char* input, const comm_size_t* block_start, const comm_size_t* block_len, char* output, comm_size_t) {
   // use output as receive buffer
   std::memcpy(output + block_start[rank_], input, block_len[rank_]);
+  std::cout << "block_len[rank_]: "<< block_len[rank_] <<std::endl;
+  //for(size_t i = block_start[rank_]; i < block_len[rank_]; ++i){
+     //std::cout << output[i] <<' ' <<std::endl;
+     //std::cout << ( output[i] + 123 ) % 256 - 128 <<std::endl;
+     //output[i] = ( output[i] + 123 ) % 256 - 128;
+  //}
   for (int i = 0; i < bruck_map_.k; ++i) {
     // get current local block size
     int cur_step = 1 << i;
@@ -208,6 +222,7 @@ void Network::AllgatherRecursiveDoubling(char* input, const comm_size_t* block_s
       need_recv_len += block_len[(target_vrank + j)];
     }
     // send and recv at same time
+    std::cout<<"AllgatherRecursiveDoubling"<<std::endl;
     linkers_->SendRecv(target, output + block_start[vrank], need_send_len,
                        target, output + block_start[target_vrank], need_recv_len);
   }
@@ -222,6 +237,7 @@ void Network::AllgatherRing(char* input, const comm_size_t* block_start, const c
   int in_block = in_rank;
   for (int i = 1; i < num_machines_; ++i) {
     // send and recv at same time
+    std::cout<<"AllgatherRing"<<std::endl;
     linkers_->SendRecv(out_rank, output + block_start[out_block], block_len[out_block],
                        in_rank, output + block_start[in_block], block_len[in_block]);
     out_block = (out_block - 1 + num_machines_) % num_machines_;

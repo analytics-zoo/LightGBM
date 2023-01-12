@@ -1,8 +1,4 @@
-/*!
- * Copyright (c) 2016 Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See LICENSE file in the project root for license information.
- */
-#ifdef USE_SOCKET
+#ifdef USE_SSL_SOCKET
 
 #include <LightGBM/config.h>
 #include <LightGBM/utils/common.h>
@@ -24,7 +20,7 @@ namespace LightGBM {
 Linkers::Linkers(Config config) {
   is_init_ = false;
   // start up socket
-  TcpSocket::Startup();
+  SslTcpSocket::Startup();
   network_time_ = std::chrono::duration<double, std::milli>(0);
   num_machines_ = config.num_machines;
   local_listen_port_ = config.local_listen_port;
@@ -35,7 +31,7 @@ Linkers::Linkers(Config config) {
 
   if (rank_ == -1) {
     // get ip list of local machine
-    std::unordered_set<std::string> local_ip_list = TcpSocket::GetLocalIpList();
+    std::unordered_set<std::string> local_ip_list = SslTcpSocket::GetLocalIpList();
     // get local rank
     for (size_t i = 0; i < client_ips_.size(); ++i) {
       if (local_ip_list.count(client_ips_[i]) > 0 && client_ports_[i] == local_listen_port_) {
@@ -48,7 +44,7 @@ Linkers::Linkers(Config config) {
     Log::Fatal("Machine list file doesn't contain the local machine");
   }
   // construct listener
-  listener_ = std::unique_ptr<TcpSocket>(new TcpSocket());
+  listener_ = std::unique_ptr<SslTcpSocket>(new SslTcpSocket());
   TryBind(local_listen_port_);
 
   for (int i = 0; i < num_machines_; ++i) {
@@ -73,7 +69,7 @@ Linkers::~Linkers() {
         linkers_[i]->Close();
       }
     }
-    TcpSocket::Finalize();
+    SslTcpSocket::Finalize();
     Log::Info("Finished linking network in %f seconds", network_time_ * 1e-3);
   }
 }
@@ -132,8 +128,8 @@ void Linkers::TryBind(int port) {
   }
 }
 
-void Linkers::SetLinker(int rank, const TcpSocket& socket) {
-  linkers_[rank].reset(new TcpSocket(socket));
+void Linkers::SetLinker(int rank, const SslTcpSocket& socket) {
+  linkers_[rank].reset(new SslTcpSocket(socket));
   // set timeout
   linkers_[rank]->SetTimeout(socket_timeout_ * 1000 * 60);
 }
@@ -144,7 +140,7 @@ void Linkers::ListenThread(int incoming_cnt) {
   int connected_cnt = 0;
   while (connected_cnt < incoming_cnt) {
     // accept incoming socket
-    TcpSocket handler = listener_->Accept();
+    SslTcpSocket handler = listener_->Accept();
     if (handler.IsClosed()) {
       continue;
     }
@@ -199,7 +195,7 @@ void Linkers::Construct() {
     if (out_rank > rank_) {
       int connect_fail_delay_time = connect_fail_retry_first_delay_interval;
       for (int i = 0; i < connect_fail_retry_cnt; ++i) {
-        TcpSocket cur_socket;
+        SslTcpSocket cur_socket;
         if (cur_socket.Connect(client_ips_[out_rank].c_str(), client_ports_[out_rank])) {
           // send local rank
           cur_socket.Send(reinterpret_cast<char*>(&rank_), sizeof(rank_));
@@ -237,4 +233,5 @@ void Linkers::PrintLinkers() {
 
 }  // namespace LightGBM
 
-#endif  // USE_SOCKET
+#endif  // USE_SSL_SOCKET
+

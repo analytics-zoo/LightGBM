@@ -113,7 +113,9 @@ struct SplitInfo {
     buffer += sizeof(monotone_type);
     std::memcpy(&num_cat_threshold, buffer, sizeof(num_cat_threshold));
     buffer += sizeof(num_cat_threshold);
+    std::cout<<"num_cat_threshold: "<<num_cat_threshold<<std::endl;
     cat_threshold.resize(num_cat_threshold);
+    std::cout<<"start to memcpy."<<std::endl;
     std::memcpy(cat_threshold.data(), buffer, sizeof(uint32_t) * num_cat_threshold);
   }
 

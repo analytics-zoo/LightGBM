@@ -22,6 +22,10 @@
 #include "socket_wrapper.hpp"
 #endif
 
+#ifdef USE_SSL_SOCKET
+#include "ssl_socket_wrapper.hpp"
+#endif
+
 #ifdef USE_MPI
 #include <mpi.h>
 #define MPI_SAFE_CALL(mpi_return) CHECK((mpi_return) == MPI_SUCCESS)
@@ -156,6 +160,46 @@ class Linkers {
   static void MpiAbortIfIsParallel();
 
   #endif
+  
+  #ifdef USE_SSL_SOCKET
+  /*!
+  * \brief Bind local listen to port
+  * \param port Local listen port
+  */
+  void TryBind(int port);
+  /*!
+  * \brief Set socket to rank
+  * \param rank
+  * \param socket
+  */
+  void SetLinker(int rank, const SslTcpSocket& socket);
+  /*!
+  * \brief Thread for listening
+  * \param incoming_cnt Number of incoming machines
+  */
+  void ListenThread(int incoming_cnt);
+  /*!
+  * \brief Construct network topo
+  */
+  void Construct();
+  /*!
+  * \brief Parser machines information from file
+  * \param machines
+  * \param filename
+  */
+  void ParseMachineList(const std::string& machines, const std::string& filename);
+  /*!
+  * \brief Check one linker is connected or not
+  * \param rank
+  * \return True if linker is connected
+  */
+  bool CheckLinker(int rank);
+  /*!
+  * \brief Print connected linkers
+  */
+  void PrintLinkers();
+
+  #endif  // USE_SSL_SOCKET
 
  private:
   /*! \brief Rank of local machine */
@@ -185,6 +229,20 @@ class Linkers {
   /*! \brief Local socket listener */
   std::unique_ptr<TcpSocket> listener_;
   #endif  // USE_SOCKET
+  #ifdef USE_SSL_SOCKET
+  /*! \brief use to store client ips */
+  std::vector<std::string> client_ips_;
+  /*! \brief use to store client ports */
+  std::vector<int> client_ports_;
+  /*! \brief time out for sockets, in minutes */
+  int socket_timeout_;
+  /*! \brief Local listen ports */
+  int local_listen_port_;
+  /*! \brief Linkers */
+  std::vector<std::unique_ptr<SslTcpSocket>> linkers_;
+  /*! \brief Local socket listener */
+  std::unique_ptr<SslTcpSocket> listener_;
+  #endif  // USE_SSL_SOCKET
 };
 
 
@@ -324,5 +382,51 @@ inline void Linkers::SendRecv(int send_rank, char* send_data, int send_len,
 }
 
 #endif  // USE_MPI
+
+#ifdef USE_SSL_SOCKET
+
+inline void Linkers::Recv(int rank, char* data, int len) const {
+  int recv_cnt = 0;
+  while (recv_cnt < len) {
+    recv_cnt += linkers_[rank]->Recv(data + recv_cnt,
+      // len - recv_cnt
+      std::min(len - recv_cnt, SocketConfig::kMaxReceiveSize));
+  }
+}
+
+inline void Linkers::Send(int rank, char* data, int len) const {
+  if (len <= 0) {
+    return;
+  }
+  int send_cnt = 0;
+  while (send_cnt < len) {
+    send_cnt += linkers_[rank]->Send(data + send_cnt, len - send_cnt);
+  }
+}
+
+inline void Linkers::SendRecv(int send_rank, char* send_data, int send_len,
+                              int recv_rank, char* recv_data, int recv_len) {
+  auto start_time = std::chrono::high_resolution_clock::now();
+  if (send_len < SocketConfig::kSocketBufferSize) {
+    // if buffer is enough, send will non-blocking
+    Send(send_rank, send_data, send_len);
+    Recv(recv_rank, recv_data, recv_len);
+  } else {
+    // if buffer is not enough, use another thread to send, since send will be blocking
+    std::thread send_worker(
+      [this, send_rank, send_data, send_len]() {
+      Send(send_rank, send_data, send_len);
+    });
+    Recv(recv_rank, recv_data, recv_len);
+    send_worker.join();
+  }
+  // wait for send complete
+  auto end_time = std::chrono::high_resolution_clock::now();
+  // output used time on each iteration
+  network_time_ += std::chrono::duration<double, std::milli>(end_time - start_time);
+}
+
+#endif  // USE_SSL_SOCKET
+
 }  // namespace LightGBM
 #endif   // LightGBM_NETWORK_LINKERS_H_
