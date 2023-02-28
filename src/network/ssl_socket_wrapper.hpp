@@ -97,79 +97,70 @@ const int kNoDelay = 1;
 class SslTcpSocket {
  public:
   SSL* ssl;
+  SSL_CTX* ctx;
+  int port;
   
-  SSL_CTX* create_context(){
-    const SSL_METHOD* method = TLS_server_method();
-    SSL_CTX* ctx = SSL_CTX_new(method);
+  void create_context(bool isServer){
+    const SSL_METHOD *method;
+    if (isServer)
+        method = TLS_server_method();
+    else
+        method = TLS_client_method();
+    ctx = SSL_CTX_new(method);
     if (!ctx) {
-        Log::Info("Unable to create SSL context");
+      Log::Info("Unable to create SSL context");
     }
-    return ctx;
+  }
+
+  // TODO: configure ssl key and cert
+  void configure_server_context(SSL_CTX *ctx)
+  {
+    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.pem") <= 0) {
+      Log::Fatal("Wrong ssl cert!");
+    }
+    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
+      Log::Fatal("Wrong ssl key!");
+    }
   }
   
   SslTcpSocket() {
     Log::Info("Creating default ssl tcp socket...");
+    create_context(true);
     sockfd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sockfd_ == INVALID_SOCKET) {
-      Log::Fatal("Socket construction error");
-      return;
-    }
-    SSL_CTX* ctx = create_context();
-    ssl = SSL_new (ctx);
-    SSL_set_fd(ssl, sockfd_);
-    if (!ssl) {
-        Log::Fatal("Error creating SSL.");
+    if (sockfd_ < 0) {
+      Log::Fatal("Unable to create socket");
     }
     ConfigSocket();
   }
 
   explicit SslTcpSocket(SOCKET socket) {
-    Log::Info("accept a socket and create a new ssl tcp one from it...");
+    Log::Info("Accept a socket and create a new ssl tcp one from it...");
+    create_context(false);
     sockfd_ = socket;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
       return;
-    }
-    SSL_CTX* ctx = create_context();
-    ssl = SSL_new (ctx);
-    SSL_set_fd(ssl, sockfd_);
-    if (!ssl) {
-        Log::Fatal("Error creating SSL.");
-    }
-    Log::Info("calling SSL_accept...");
-    int err = SSL_accept(ssl);
-    if (err < 0){
-       Log::Fatal("SSL accept failure.");
     }
     ConfigSocket();
   }
 
   SslTcpSocket(const SslTcpSocket &object) {
     Log::Info("create a new ssl tcp socket from object...");
+    create_context(false);
     sockfd_ = object.sockfd_;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
       return;
     }
-    SSL_CTX* ctx = create_context();
-    ssl = SSL_new (ctx);
-    SSL_set_fd(ssl, sockfd_);
-    if (!ssl) {
-        Log::Fatal("Error creating SSL.");
-    }
-    Log::Info("calling SSL_accept...");
-    int err = SSL_accept(ssl);
-    if (err < 0){
-       Log::Fatal("SSL accept failure.");
-    }
     ConfigSocket();
   }
 
-  ~SslTcpSocket() {
-  }
+  ~SslTcpSocket() {}
+
   inline void SetTimeout(int timeout) {
     setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char*>(&timeout), sizeof(timeout));
   }
+  
   inline void ConfigSocket() {
     if (sockfd_ == INVALID_SOCKET) {
       return;
@@ -312,14 +303,13 @@ class SslTcpSocket {
   }
 
   inline void Listen(int backlog = 128) {
-    listen(sockfd_, backlog);
+    if (listen(sockfd_, backlog) < 0){
+      Log::Fatal("Unable to listen");
+    }
   }
 
   inline SslTcpSocket Accept() {
     SOCKET newfd = accept(sockfd_, NULL, NULL);
-    if (newfd < 0){
-      printf ("Unable to accept");
-    }
     if (newfd == INVALID_SOCKET) {
       int err_code = GetLastError();
 #if defined(_WIN32)
@@ -328,35 +318,28 @@ class SslTcpSocket {
       Log::Fatal("Socket accept error, %s (code: %d)", std::strerror(err_code), err_code);
 #endif
     }
+    ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, newfd);
+    if (SSL_accept(ssl) <= 0) {
+      Log::Fatal("Ssl accept error");
+    } else {
+      Log::Info("Client SSL connection accepted");
+    }
     return SslTcpSocket(newfd);
   }
 
   inline int Send(const char *buf_, int len, int flag = 0) {
     int cur_cnt = SSL_write(ssl, buf_, len);
-    if (cur_cnt < 0) {
-        int err = SSL_get_error(ssl, cur_cnt);
-        switch (err) {
-        case SSL_ERROR_ZERO_RETURN:printf("SSL_ERROR_ZERO_RETURN");
-	case SSL_ERROR_SYSCALL:printf("SSL_ERROR_SYSCALL");
-        case SSL_ERROR_SSL:printf("SSL_ERROR_SSL");
-        default:
-            Log::Fatal("Socket send error (code: %d)", err);
-        }
+    if (cur_cnt <= 0) {
+        Log::Fatal("SSL write error, peer closed connection");
     }
     return cur_cnt;
   }
 
   inline int Recv(char *buf_, int len, int flags = 0) {
-    int batch = len/100;
-    int read_cnt = 0, cur_cnt = 0;
-    do {
-        cur_cnt = SSL_read(ssl, buf_ + read_cnt, batch);
-        read_cnt += cur_cnt;
-    } while (cur_cnt > 0);
-    if (cur_cnt < 0) {
-        int err = SSL_get_error(ssl, cur_cnt);
-        if (err == SSL_ERROR_ZERO_RETURN || err == SSL_ERROR_SYSCALL || err == SSL_ERROR_SSL)
-            Log::Fatal("Socket recv error (code: %d)", err);
+    int cur_cnt = SSL_read(ssl, buf_, len);
+    if (cur_cnt <= 0) {
+        Log::Fatal("SSL read error, peer closed connection");
     }
     return cur_cnt;
   }
