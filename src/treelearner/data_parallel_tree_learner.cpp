@@ -144,15 +144,11 @@ void DataParallelTreeLearner<TREELEARNER_T>::BeforeTrain() {
     }
   });
   // copy back
-  std::cout<< "data learner copy start"<<std::endl;
   std::memcpy(reinterpret_cast<void*>(&data), output_buffer_.data(), size);
-  std::cout<< "data learner copy end"<<std::endl;
   // set global sumup info
   this->smaller_leaf_splits_->Init(std::get<1>(data), std::get<2>(data));
-  std::cout<< "data learner set global sumup info end"<<std::endl;
   // init global data count in leaf
   global_data_count_in_leaf_[0] = std::get<0>(data);
-  std::cout<< "data learner init global data count end"<<std::endl;
 }
 
 template <typename TREELEARNER_T>
