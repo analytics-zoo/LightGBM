@@ -12,7 +12,6 @@
 #include <memory>
 #include <vector>
 
-#include "cuda_tree_learner.h"
 #include "gpu_tree_learner.h"
 #include "serial_tree_learner.h"
 
@@ -209,11 +208,8 @@ inline void SyncUpGlobalBestSplit(char* input_buffer_, char* output_buffer_, Spl
     }
   });
   // copy back
-  std::cout<<"start smaller_best_split"<<std::endl;
   smaller_best_split->CopyFrom(output_buffer_);
-  std::cout<<"end smaller_best_split"<<std::endl;
   larger_best_split->CopyFrom(output_buffer_ + size);
-  std::cout<<"end larger_best_split"<<std::endl;
 }
 
 }  // namespace LightGBM
