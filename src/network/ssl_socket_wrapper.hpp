@@ -100,37 +100,7 @@ class SslTcpSocket {
   SSL_CTX* ctx;
   int port;
   
-  SSL* create_context(bool isServer){
-    SSL_library_init();
-    SSLeay_add_ssl_algorithms();
-    SSL_load_error_strings();
-    const SSL_METHOD *method;
-    if (isServer) {
-      ctx = SSL_CTX_new(TLS_server_method());
-      //SSL_CTX_set_cipher_list(ssl_server_ctx, "TLS_AES_256_GCM_SHA384")
-    } else {
-      ctx = SSL_CTX_new(TLS_client_method());
-    }
-    if (!ctx) {
-      Log::Fatal("Unable to create SSL context");
-    }
-
-    //if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1)
-    //{
-    //    Log::Fatal("unable to set cipher list");
-    //}
-    //SSL_CTX_set_cipher_list(ctx,
-    //  "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256");
-    //SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-    //SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!eNULL:@STRENGTH");
-    //SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256");
-    //SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-    SSL_CONF_CTX *ssl_conf_ctx = SSL_CONF_CTX_new();
-    SSL_CONF_CTX_set_ssl_ctx(ssl_conf_ctx, ctx);
-    SSL_CONF_CTX_set_flags(ssl_conf_ctx,
-      SSL_CONF_FLAG_FILE | SSL_CONF_FLAG_SERVER | SSL_CONF_FLAG_CLIENT);
-    
-    
+  void initalize_ssl_context(SSL_CONF_CTX*& ssl_conf_ctx, SSL_CTX*& ctx) {
     const char* cipher_list_tlsv12_below =
         "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-"
         "AES128-GCM-SHA256:"
@@ -141,24 +111,86 @@ class SslTcpSocket {
         "TLS13-AES-256-GCM-SHA384:TLS13-AES-128-GCM-SHA256";
     const char* supported_curves = "P-521:P-384";
 
-    SSL_CONF_cmd(
-             ssl_conf_ctx, "CipherString", cipher_list_tlsv12_below);
-    SSL_CONF_cmd(
-             ssl_conf_ctx, "Ciphersuites", cipher_list_tlsv13);
-    SSL_CONF_cmd(ssl_conf_ctx, "Curves", supported_curves);
-
-    if (isServer) {
-      configure_server_verify(ctx);
-    } else {
-      configure_client_cert_and_key(ctx);
+    SSL_CONF_CTX_set_ssl_ctx(ssl_conf_ctx, ctx);
+    SSL_CONF_CTX_set_flags(
+        ssl_conf_ctx,
+        SSL_CONF_FLAG_FILE | SSL_CONF_FLAG_SERVER | SSL_CONF_FLAG_CLIENT);
+    int ssl_conf_return_value = -1;
+    if ((ssl_conf_return_value =
+             SSL_CONF_cmd(ssl_conf_ctx, "MinProtocol", "TLSv1.2")) < 0)
+    {
+        Log::Fatal(
+            "Setting MinProtocol for ssl context configuration failed with "
+            "error %d \n",
+            ssl_conf_return_value);
     }
-    return SSL_new(ctx);
+    if ((ssl_conf_return_value =
+             SSL_CONF_cmd(ssl_conf_ctx, "MaxProtocol", "TLSv1.3")) < 0)
+    {
+        Log::Fatal(
+            "Setting MaxProtocol for ssl context configuration failed with "
+            "error %d \n",
+            ssl_conf_return_value);
+    }
+    if ((ssl_conf_return_value = SSL_CONF_cmd(
+             ssl_conf_ctx, "CipherString", cipher_list_tlsv12_below)) < 0)
+    {
+        Log::Fatal(
+            "Setting CipherString for ssl context configuration failed with "
+            "error %d \n",
+            ssl_conf_return_value);
+    }
+    if ((ssl_conf_return_value = SSL_CONF_cmd(
+             ssl_conf_ctx, "Ciphersuites", cipher_list_tlsv13)) < 0)
+    {
+        Log::Fatal(
+            "Setting Ciphersuites for ssl context configuration failed with "
+            "error %d \n",
+            ssl_conf_return_value);
+    }
+    if ((ssl_conf_return_value =
+             SSL_CONF_cmd(ssl_conf_ctx, "Curves", supported_curves)) < 0)
+    {
+        Log::Fatal(
+            "Setting Curves for ssl context configuration failed with error %d "
+            "\n",
+            ssl_conf_return_value);
+    }
+    if (!SSL_CONF_CTX_finish(ssl_conf_ctx))
+    {
+        Log::Fatal("Error finishing ssl context configuration \n");
+    }
+  }
+
+  void create_ssl_context(bool isServer){
+    SSL_library_init();
+    SSLeay_add_ssl_algorithms();
+    SSL_load_error_strings();
+    SSL_CONF_CTX* ssl_conf_ctx = SSL_CONF_CTX_new();
+    if (isServer) {
+      ctx = SSL_CTX_new(TLS_server_method());
+    } else {
+      ctx = SSL_CTX_new(TLS_client_method());
+    }
+    if (!ctx) {
+      Log::Fatal("Unable to create SSL context");
+    }
+    if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1) {
+      Log::Fatal("Unable to create SSL_CTX_set_cipher_list");
+    }
+    initalize_ssl_context(ssl_conf_ctx, ctx);
+    if (isServer) {
+      configure_server_cert_and_key(ctx);
+    } else {
+      configure_client_verify(ctx);
+    }
+    ssl = SSL_new(ctx);
   }
 
   // TODO: configure ssl key and cert
-  void configure_client_cert_and_key(SSL_CTX *ctx)
+  void configure_server_cert_and_key(SSL_CTX *ctx)
   {
-    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.pem") <= 0) {
+    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.crt") <= 0) {
       Log::Fatal("Wrong ssl cert!");
     }
     if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
@@ -169,11 +201,11 @@ class SslTcpSocket {
     }
   }
 
-  void configure_server_verify(SSL_CTX *ctx)
+  void configure_client_verify(SSL_CTX *ctx)
   {
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-    if (!SSL_CTX_load_verify_locations(ctx, "cert.pem", NULL)) {
-       Log::Fatal("Ssl CTX load error!");
+    if (!SSL_CTX_load_verify_locations(ctx, "cert.crt", NULL)) {
+      Log::Fatal("Errir SSL_CTX_load_verify_locations");
     }
   }
 
@@ -192,7 +224,6 @@ class SslTcpSocket {
   
   SslTcpSocket() {
     Log::Info("Creating default ssl tcp socket...");
-    // ssl = create_context(false);
     sockfd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sockfd_ < 0) {
       Log::Fatal("Unable to create socket");
@@ -200,9 +231,11 @@ class SslTcpSocket {
     ConfigSocket();
   }
 
-  explicit SslTcpSocket(SOCKET socket) {
+  explicit SslTcpSocket(SOCKET sockfd_, SSL* ssl, SSL_CTX *ctx) {
     Log::Info("Accept a socket and create a new ssl tcp one from it...");
-    sockfd_ = socket;
+    this -> sockfd_ = sockfd_;
+    this -> ssl = ssl;
+    this -> ctx = ctx;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
       return;
@@ -213,6 +246,8 @@ class SslTcpSocket {
   SslTcpSocket(const SslTcpSocket &object) {
     Log::Info("create a new ssl tcp socket from object...");
     sockfd_ = object.sockfd_;
+    ssl = object.ssl;
+    ctx = object.ctx;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
       return;
@@ -355,16 +390,16 @@ class SslTcpSocket {
 
   inline bool Connect(const char *url, int port) {
     sockaddr_in server_addr = GetAddress(url, port);
-    ssl = create_context(false);
     if (connect(sockfd_, reinterpret_cast<const sockaddr*>(&server_addr), sizeof(sockaddr_in)) == 0) {
+      create_ssl_context(false);
       if (SSL_set_fd(ssl, sockfd_) != 1) {
         log_ssl();
-	Log::Fatal("SSL set fd error in Connect");\
+        Log::Fatal("SSL set fd error in Connect");
         return false;
       }
-      int err = SSL_connect(ssl);
-      if (err <= 0) {
-	log_ssl();
+      int err;
+      if ((err = SSL_connect(ssl)) != 1) {
+        log_ssl();
         Log::Fatal("Error: Could not connect a TLS session ret2=%d SSL_get_error()=%d\n",
               err,
               SSL_get_error(ssl, err));
@@ -391,25 +426,20 @@ class SslTcpSocket {
       Log::Fatal("Socket accept error, %s (code: %d)", std::strerror(err_code), err_code);
 #endif
     }
-    ssl = create_context(true);
+    create_ssl_context(true);
     if (SSL_set_fd(ssl, client_fd) != 1) {
-	log_ssl();
-        Log::Fatal("SSL set fd error in Connect");
+      log_ssl();
+      Log::Fatal("SSL set fd error in Connect");
     }
-    int return_code = SSL_accept(ssl);
-    if (return_code  == 0) {
+    int err;
+    if ((err = SSL_accept(ssl)) <= 0) {
       log_ssl();
-      int ssl_shutdown_error_code = SSL_get_error(ssl, return_code);
-      Log::Fatal("Ssl accept was shutdown with error code %d", ssl_shutdown_error_code);
-    } else if (return_code < 0) {
-      log_ssl();
-      Log::Fatal("Error: Could not accept a TLS session ret2=%d SSL_get_error()=%d\n",
-              return_code,
-              SSL_get_error(ssl, return_code));
+      Log::Fatal("SSL accept failed, error(%d)(%d)\n",
+              err, SSL_get_error(ssl, err));
     } else {
       Log::Info("Client SSL connection accepted");
     }
-    return SslTcpSocket(client_fd);
+    return SslTcpSocket(client_fd, ssl, ctx);
   }
 
   inline int Send(const char *buf_, int len, int flag = 0) {
