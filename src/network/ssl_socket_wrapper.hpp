@@ -100,44 +100,99 @@ class SslTcpSocket {
   SSL_CTX* ctx;
   int port;
   
-  void create_context(bool isServer){
+  SSL* create_context(bool isServer){
+    SSL_library_init();
+    SSLeay_add_ssl_algorithms();
+    SSL_load_error_strings();
     const SSL_METHOD *method;
-    if (isServer)
-        method = TLS_server_method();
-    else
-        method = TLS_client_method();
-    ctx = SSL_CTX_new(method);
-    if (!ctx) {
-      Log::Info("Unable to create SSL context");
+    if (isServer) {
+      ctx = SSL_CTX_new(TLS_server_method());
+      //SSL_CTX_set_cipher_list(ssl_server_ctx, "TLS_AES_256_GCM_SHA384")
+    } else {
+      ctx = SSL_CTX_new(TLS_client_method());
     }
+    if (!ctx) {
+      Log::Fatal("Unable to create SSL context");
+    }
+
+    //if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1)
+    //{
+    //    Log::Fatal("unable to set cipher list");
+    //}
+    //SSL_CTX_set_cipher_list(ctx,
+    //  "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256");
+    //SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    //SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!eNULL:@STRENGTH");
+    //SSL_CTX_set_ciphersuites(ctx, "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256");
+    //SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    SSL_CONF_CTX *ssl_conf_ctx = SSL_CONF_CTX_new();
+    SSL_CONF_CTX_set_ssl_ctx(ssl_conf_ctx, ctx);
+    SSL_CONF_CTX_set_flags(ssl_conf_ctx,
+      SSL_CONF_FLAG_FILE | SSL_CONF_FLAG_SERVER | SSL_CONF_FLAG_CLIENT);
+    
+    
+    const char* cipher_list_tlsv12_below =
+        "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-"
+        "AES128-GCM-SHA256:"
+        "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-"
+        "AES256-SHA384:"
+        "ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384";
+    const char* cipher_list_tlsv13 =
+        "TLS13-AES-256-GCM-SHA384:TLS13-AES-128-GCM-SHA256";
+    const char* supported_curves = "P-521:P-384";
+
+    SSL_CONF_cmd(
+             ssl_conf_ctx, "CipherString", cipher_list_tlsv12_below);
+    SSL_CONF_cmd(
+             ssl_conf_ctx, "Ciphersuites", cipher_list_tlsv13);
+    SSL_CONF_cmd(ssl_conf_ctx, "Curves", supported_curves);
+
+    if (isServer) {
+      configure_server_verify(ctx);
+    } else {
+      configure_client_cert_and_key(ctx);
+    }
+    return SSL_new(ctx);
   }
 
   // TODO: configure ssl key and cert
-  void configure_server_context(SSL_CTX *ctx)
+  void configure_client_cert_and_key(SSL_CTX *ctx)
   {
-    if (SSL_CTX_use_certificate_chain_file(ctx,
-	"/home/heyang/LightGBM/examples/parallel_learning/cert.pem") <= 0) {
+    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.pem") <= 0) {
       Log::Fatal("Wrong ssl cert!");
     }
-    if (SSL_CTX_use_PrivateKey_file(ctx,
-        "/home/heyang/LightGBM/examples/parallel_learning/key.pem", SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
       Log::Fatal("Wrong ssl key!");
+    }
+    if (!SSL_CTX_check_private_key(ctx)){
+      Log::Fatal("Private key does not match the public certificate");
     }
   }
 
-  void configure_client_context(SSL_CTX *ctx)
+  void configure_server_verify(SSL_CTX *ctx)
   {
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-    if (!SSL_CTX_load_verify_locations(ctx,
-        "/home/heyang/LightGBM/examples/parallel_learning/cert.pem", NULL)) {
+    if (!SSL_CTX_load_verify_locations(ctx, "cert.pem", NULL)) {
        Log::Fatal("Ssl CTX load error!");
+    }
+  }
+
+  void log_ssl()
+  {
+    int err;
+    while (err = ERR_get_error()) {
+        char *str = ERR_error_string(err, 0);
+        if (!str)
+            return;
+        printf(str);
+        printf("\n");
+        fflush(stdout);
     }
   }
   
   SslTcpSocket() {
     Log::Info("Creating default ssl tcp socket...");
-    create_context(false);
-    //configure_server_context(ctx);
+    // ssl = create_context(false);
     sockfd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sockfd_ < 0) {
       Log::Fatal("Unable to create socket");
@@ -147,7 +202,6 @@ class SslTcpSocket {
 
   explicit SslTcpSocket(SOCKET socket) {
     Log::Info("Accept a socket and create a new ssl tcp one from it...");
-    create_context(true);
     sockfd_ = socket;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
@@ -158,7 +212,6 @@ class SslTcpSocket {
 
   SslTcpSocket(const SslTcpSocket &object) {
     Log::Info("create a new ssl tcp socket from object...");
-    create_context(true);
     sockfd_ = object.sockfd_;
     if (sockfd_ == INVALID_SOCKET) {
       Log::Fatal("Passed socket error");
@@ -302,16 +355,21 @@ class SslTcpSocket {
 
   inline bool Connect(const char *url, int port) {
     sockaddr_in server_addr = GetAddress(url, port);
-    configure_client_context(ctx);
+    ssl = create_context(false);
     if (connect(sockfd_, reinterpret_cast<const sockaddr*>(&server_addr), sizeof(sockaddr_in)) == 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      SSL_set_fd(ssl, sockfd_);
-      int err = SSL_connect(ssl);
-      if (err <= 0) {
-        Log::Fatal("Error creating SSL connection.  err=%x", err);
+      if (SSL_set_fd(ssl, sockfd_) != 1) {
+        log_ssl();
+	Log::Fatal("SSL set fd error in Connect");\
         return false;
       }
-      Log::Info("SSL connection using %s", SSL_get_cipher (ssl));
+      int err = SSL_connect(ssl);
+      if (err <= 0) {
+	log_ssl();
+        Log::Fatal("Error: Could not connect a TLS session ret2=%d SSL_get_error()=%d\n",
+              err,
+              SSL_get_error(ssl, err));
+        return false;
+      }
       return true;
     }
     return false;
@@ -324,8 +382,8 @@ class SslTcpSocket {
   }
 
   inline SslTcpSocket Accept() {
-    SOCKET newfd = accept(sockfd_, NULL, NULL);
-    if (newfd == INVALID_SOCKET) {
+    SOCKET client_fd = accept(sockfd_, NULL, NULL);
+    if (client_fd == INVALID_SOCKET) {
       int err_code = GetLastError();
 #if defined(_WIN32)
       Log::Fatal("Socket accept error (code: %d)", err_code);
@@ -333,19 +391,25 @@ class SslTcpSocket {
       Log::Fatal("Socket accept error, %s (code: %d)", std::strerror(err_code), err_code);
 #endif
     }
-    configure_server_context(ctx);
-    ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, newfd);
+    ssl = create_context(true);
+    if (SSL_set_fd(ssl, client_fd) != 1) {
+	log_ssl();
+        Log::Fatal("SSL set fd error in Connect");
+    }
     int return_code = SSL_accept(ssl);
     if (return_code  == 0) {
+      log_ssl();
       int ssl_shutdown_error_code = SSL_get_error(ssl, return_code);
       Log::Fatal("Ssl accept was shutdown with error code %d", ssl_shutdown_error_code);
     } else if (return_code < 0) {
-      Log::Fatal("Ssl accept with fatal error %d", return_code);
+      log_ssl();
+      Log::Fatal("Error: Could not accept a TLS session ret2=%d SSL_get_error()=%d\n",
+              return_code,
+              SSL_get_error(ssl, return_code));
     } else {
       Log::Info("Client SSL connection accepted");
     }
-    return SslTcpSocket(newfd);
+    return SslTcpSocket(client_fd);
   }
 
   inline int Send(const char *buf_, int len, int flag = 0) {
