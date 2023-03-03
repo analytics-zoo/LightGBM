@@ -99,7 +99,9 @@ class SslTcpSocket {
   SSL* ssl;
   SSL_CTX* ctx;
   int port;
-  
+  const char* key_path = "/ppml/keys/server.key";
+  const char* cert_path = "/ppml/keys/server.crt";
+
   void initalize_ssl_context(SSL_CONF_CTX*& ssl_conf_ctx, SSL_CTX*& ctx) {
     const char* cipher_list_tlsv12_below =
         "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-"
@@ -190,10 +192,10 @@ class SslTcpSocket {
   // TODO: configure ssl key and cert
   void configure_server_cert_and_key(SSL_CTX *ctx)
   {
-    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.crt") <= 0) {
+    if (SSL_CTX_use_certificate_chain_file(ctx, cert_path) <= 0) {
       Log::Fatal("Wrong ssl cert!");
     }
-    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_PrivateKey_file(ctx, key_path, SSL_FILETYPE_PEM) <= 0) {
       Log::Fatal("Wrong ssl key!");
     }
     if (!SSL_CTX_check_private_key(ctx)){
@@ -204,7 +206,7 @@ class SslTcpSocket {
   void configure_client_verify(SSL_CTX *ctx)
   {
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-    if (!SSL_CTX_load_verify_locations(ctx, "cert.crt", NULL)) {
+    if (!SSL_CTX_load_verify_locations(ctx, cert_path, NULL)) {
       Log::Fatal("Errir SSL_CTX_load_verify_locations");
     }
   }
