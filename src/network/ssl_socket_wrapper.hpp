@@ -121,7 +121,8 @@ class SslTcpSocket {
     if ((ssl_conf_return_value =
              SSL_CONF_cmd(ssl_conf_ctx, "MinProtocol", "TLSv1.2")) < 0)
     {
-        Log::Fatal(
+        log_ssl();
+        Log::Warning(
             "Setting MinProtocol for ssl context configuration failed with "
             "error %d \n",
             ssl_conf_return_value);
@@ -129,7 +130,8 @@ class SslTcpSocket {
     if ((ssl_conf_return_value =
              SSL_CONF_cmd(ssl_conf_ctx, "MaxProtocol", "TLSv1.3")) < 0)
     {
-        Log::Fatal(
+        log_ssl();
+        Log::Warning(
             "Setting MaxProtocol for ssl context configuration failed with "
             "error %d \n",
             ssl_conf_return_value);
@@ -137,7 +139,8 @@ class SslTcpSocket {
     if ((ssl_conf_return_value = SSL_CONF_cmd(
              ssl_conf_ctx, "CipherString", cipher_list_tlsv12_below)) < 0)
     {
-        Log::Fatal(
+        log_ssl();
+        Log::Warning(
             "Setting CipherString for ssl context configuration failed with "
             "error %d \n",
             ssl_conf_return_value);
@@ -145,7 +148,8 @@ class SslTcpSocket {
     if ((ssl_conf_return_value = SSL_CONF_cmd(
              ssl_conf_ctx, "Ciphersuites", cipher_list_tlsv13)) < 0)
     {
-        Log::Fatal(
+        log_ssl();
+        Log::Warning(
             "Setting Ciphersuites for ssl context configuration failed with "
             "error %d \n",
             ssl_conf_return_value);
@@ -153,6 +157,7 @@ class SslTcpSocket {
     if ((ssl_conf_return_value =
              SSL_CONF_cmd(ssl_conf_ctx, "Curves", supported_curves)) < 0)
     {
+        log_ssl();
         Log::Fatal(
             "Setting Curves for ssl context configuration failed with error %d "
             "\n",
@@ -160,6 +165,7 @@ class SslTcpSocket {
     }
     if (!SSL_CONF_CTX_finish(ssl_conf_ctx))
     {
+        log_ssl();
         Log::Fatal("Error finishing ssl context configuration \n");
     }
   }
@@ -175,10 +181,12 @@ class SslTcpSocket {
       ctx = SSL_CTX_new(TLS_client_method());
     }
     if (!ctx) {
+      log_ssl();
       Log::Fatal("Unable to create SSL context");
     }
     if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1) {
-      Log::Fatal("Unable to create SSL_CTX_set_cipher_list");
+      log_ssl();
+      Log::Warning("Unable to create SSL_CTX_set_cipher_list");
     }
     initalize_ssl_context(ssl_conf_ctx, ctx);
     if (isServer) {
@@ -193,12 +201,15 @@ class SslTcpSocket {
   void configure_server_cert_and_key(SSL_CTX *ctx)
   {
     if (SSL_CTX_use_certificate_chain_file(ctx, cert_path) <= 0) {
+      log_ssl();
       Log::Fatal("Wrong ssl cert!");
     }
     if (SSL_CTX_use_PrivateKey_file(ctx, key_path, SSL_FILETYPE_PEM) <= 0) {
+      log_ssl();
       Log::Fatal("Wrong ssl key!");
     }
     if (!SSL_CTX_check_private_key(ctx)){
+      log_ssl();
       Log::Fatal("Private key does not match the public certificate");
     }
   }
@@ -207,6 +218,7 @@ class SslTcpSocket {
   {
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
     if (!SSL_CTX_load_verify_locations(ctx, cert_path, NULL)) {
+      log_ssl();
       Log::Fatal("Errir SSL_CTX_load_verify_locations");
     }
   }
@@ -447,7 +459,8 @@ class SslTcpSocket {
   inline int Send(const char *buf_, int len, int flag = 0) {
     int cur_cnt = SSL_write(ssl, buf_, len);
     if (cur_cnt <= 0) {
-        Log::Fatal("SSL write error, peer closed connection");
+      log_ssl();
+      Log::Fatal("SSL write error, peer closed connection");
     }
     return cur_cnt;
   }
@@ -455,7 +468,8 @@ class SslTcpSocket {
   inline int Recv(char *buf_, int len, int flags = 0) {
     int cur_cnt = SSL_read(ssl, buf_, len);
     if (cur_cnt <= 0) {
-        Log::Fatal("SSL read error, peer closed connection");
+      log_ssl();
+      Log::Fatal("SSL read error, peer closed connection");
     }
     return cur_cnt;
   }
