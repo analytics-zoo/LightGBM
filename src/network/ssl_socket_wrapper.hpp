@@ -379,6 +379,7 @@ class SslTcpSocket {
         char addressBuffer[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
         ip_list.insert(std::string(addressBuffer));
+	std::cout<<std::string(addressBuffer)<<std::endl;
       }
     }
     if (ifAddrStruct != NULL) freeifaddrs(ifAddrStruct);
