@@ -185,8 +185,7 @@ class SslTcpSocket {
       Log::Fatal("Unable to create SSL context");
     }
     if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1) {
-      log_ssl();
-      Log::Warning("Unable to create SSL_CTX_set_cipher_list");
+      Log::Info("Unable to create SSL_CTX_set_cipher_list");
     }
     initalize_ssl_context(ssl_conf_ctx, ctx);
     if (isServer) {
@@ -413,6 +412,7 @@ class SslTcpSocket {
         return false;
       }
       int err;
+      Log::Info("SSL connecting...");
       if ((err = SSL_connect(ssl)) != 1) {
         log_ssl();
         Log::Fatal("Error: Could not connect a TLS session ret2=%d SSL_get_error()=%d\n",
@@ -447,6 +447,7 @@ class SslTcpSocket {
       Log::Fatal("SSL set fd error in Connect");
     }
     int err;
+    Log::Info("SSL accepting...");
     if ((err = SSL_accept(ssl)) <= 0) {
       log_ssl();
       Log::Fatal("SSL accept failed, error(%d)(%d)\n",
