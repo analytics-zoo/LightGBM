@@ -185,7 +185,7 @@ class SslTcpSocket {
       Log::Fatal("Unable to create SSL context");
     }
     if (SSL_CTX_set_cipher_list(ctx, "TLS_AES_256_GCM_SHA384") != 1) {
-      Log::Info("Unable to create SSL_CTX_set_cipher_list");
+      Log::Warning("Unable to set TLSV2 cipher, ignored and try to set TLSV3...");
     }
     initalize_ssl_context(ssl_conf_ctx, ctx);
     if (isServer) {
@@ -196,7 +196,6 @@ class SslTcpSocket {
     ssl = SSL_new(ctx);
   }
 
-  // TODO: configure ssl key and cert
   void configure_server_cert_and_key(SSL_CTX *ctx)
   {
     if (SSL_CTX_use_certificate_chain_file(ctx, cert_path) <= 0) {
@@ -378,7 +377,6 @@ class SslTcpSocket {
         char addressBuffer[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
         ip_list.insert(std::string(addressBuffer));
-	std::cout<<std::string(addressBuffer)<<std::endl;
       }
     }
     if (ifAddrStruct != NULL) freeifaddrs(ifAddrStruct);
