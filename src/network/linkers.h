@@ -22,8 +22,8 @@
 #include "socket_wrapper.hpp"
 #endif
 
-#ifdef USE_SSL_SOCKET
-#include "ssl_socket_wrapper.hpp"
+#ifdef USE_SSL
+#include "ssl_wrapper.hpp"
 #endif
 
 #ifdef USE_MPI
@@ -161,7 +161,7 @@ class Linkers {
 
   #endif
   
-  #ifdef USE_SSL_SOCKET
+  #ifdef USE_SSL
   /*!
   * \brief Bind local listen to port
   * \param port Local listen port
@@ -172,7 +172,7 @@ class Linkers {
   * \param rank
   * \param socket
   */
-  void SetLinker(int rank, const SslTcpSocket& socket);
+  void SetLinker(int rank, const Ssl& socket);
   /*!
   * \brief Thread for listening
   * \param incoming_cnt Number of incoming machines
@@ -199,7 +199,7 @@ class Linkers {
   */
   void PrintLinkers();
 
-  #endif  // USE_SSL_SOCKET
+  #endif  // USE_SSL
 
  private:
   /*! \brief Rank of local machine */
@@ -229,7 +229,7 @@ class Linkers {
   /*! \brief Local socket listener */
   std::unique_ptr<TcpSocket> listener_;
   #endif  // USE_SOCKET
-  #ifdef USE_SSL_SOCKET
+  #ifdef USE_SSL
   /*! \brief use to store client ips */
   std::vector<std::string> client_ips_;
   /*! \brief use to store client ports */
@@ -239,10 +239,10 @@ class Linkers {
   /*! \brief Local listen ports */
   int local_listen_port_;
   /*! \brief Linkers */
-  std::vector<std::unique_ptr<SslTcpSocket>> linkers_;
+  std::vector<std::unique_ptr<Ssl>> linkers_;
   /*! \brief Local socket listener */
-  std::unique_ptr<SslTcpSocket> listener_;
-  #endif  // USE_SSL_SOCKET
+  std::unique_ptr<Ssl> listener_;
+  #endif  // USE_SSL
 };
 
 
@@ -383,7 +383,7 @@ inline void Linkers::SendRecv(int send_rank, char* send_data, int send_len,
 
 #endif  // USE_MPI
 
-#ifdef USE_SSL_SOCKET
+#ifdef USE_SSL
 
 inline void Linkers::Recv(int rank, char* data, int len) const {
   int recv_cnt = 0;
@@ -426,7 +426,7 @@ inline void Linkers::SendRecv(int send_rank, char* send_data, int send_len,
   network_time_ += std::chrono::duration<double, std::milli>(end_time - start_time);
 }
 
-#endif  // USE_SSL_SOCKET
+#endif  // USE_SSL
 
 }  // namespace LightGBM
 #endif   // LightGBM_NETWORK_LINKERS_H_
