@@ -202,7 +202,7 @@ void Linkers::Construct() {
         TcpSocket cur_socket;
         if (cur_socket.Connect(client_ips_[out_rank].c_str(), client_ports_[out_rank])) {
           // send local rank
-          cur_socket.Send(reinterpret_cast<char*>(&rank_), sizeof(rank_));
+          cur_socket.Send(reinterpret_cast<const char*>(&rank_), sizeof(rank_));
           SetLinker(out_rank, cur_socket);
           break;
         } else {

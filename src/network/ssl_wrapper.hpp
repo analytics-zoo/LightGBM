@@ -4,7 +4,7 @@
  */
 #ifndef LIGHTGBM_NETWORK_SOCKET_WRAPPER_HPP_
 #define LIGHTGBM_NETWORK_SOCKET_WRAPPER_HPP_
-#ifdef USE_SSL_SOCKET
+#ifdef USE_SSL
 
 #include <LightGBM/utils/log.h>
 
@@ -94,7 +94,7 @@ const int kMaxReceiveSize = 100 * 1000;
 const int kNoDelay = 1;
 }
 
-class SslTcpSocket {
+class Ssl {
  public:
   SSL* ssl;
   SSL_CTX* ctx;
@@ -221,21 +221,19 @@ class SslTcpSocket {
     }
   }
 
-  void log_ssl()
-  {
+  inline void log_ssl() {
     int err;
     while (err = ERR_get_error()) {
-        char *str = ERR_error_string(err, 0);
-        if (!str)
-            return;
-        printf(str);
-        printf("\n");
-        fflush(stdout);
+      char *str = ERR_error_string(err, 0);
+      if (!str) return;
+      printf(str);
+      printf("\n");
+      fflush(stdout);
     }
   }
   
-  SslTcpSocket() {
-    Log::Info("Creating default ssl tcp socket...");
+  Ssl() {
+    Log::Info("Creating default ssl socket...");
     sockfd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (sockfd_ < 0) {
       Log::Fatal("Unable to create socket");
@@ -243,8 +241,8 @@ class SslTcpSocket {
     ConfigSocket();
   }
 
-  explicit SslTcpSocket(SOCKET sockfd_, SSL* ssl, SSL_CTX *ctx) {
-    Log::Info("Accept a socket and create a new ssl tcp one from it...");
+  explicit Ssl(SOCKET sockfd_, SSL* ssl, SSL_CTX *ctx) {
+    Log::Info("Accept a socket and create a new ssl one from it...");
     this -> sockfd_ = sockfd_;
     this -> ssl = ssl;
     this -> ctx = ctx;
@@ -255,8 +253,8 @@ class SslTcpSocket {
     ConfigSocket();
   }
 
-  SslTcpSocket(const SslTcpSocket &object) {
-    Log::Info("create a new ssl tcp socket from object...");
+  Ssl(const Ssl &object) {
+    Log::Info("create a new ssl socket from object...");
     sockfd_ = object.sockfd_;
     ssl = object.ssl;
     ctx = object.ctx;
@@ -267,7 +265,7 @@ class SslTcpSocket {
     ConfigSocket();
   }
 
-  ~SslTcpSocket() {}
+  ~Ssl() {}
 
   inline void SetTimeout(int timeout) {
     setsockopt(sockfd_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char*>(&timeout), sizeof(timeout));
@@ -429,7 +427,7 @@ class SslTcpSocket {
     }
   }
 
-  inline SslTcpSocket Accept() {
+  inline Ssl Accept() {
     SOCKET client_fd = accept(sockfd_, NULL, NULL);
     if (client_fd == INVALID_SOCKET) {
       int err_code = GetLastError();
@@ -453,7 +451,7 @@ class SslTcpSocket {
     } else {
       Log::Info("Client SSL connection accepted");
     }
-    return SslTcpSocket(client_fd, ssl, ctx);
+    return Ssl(client_fd, ssl, ctx);
   }
 
   inline int Send(const char *buf_, int len, int flag = 0) {
@@ -494,7 +492,7 @@ class SslTcpSocket {
 };
 
 }  // namespace LightGBM
-#endif  // USE_SSL_SOCKET
+#endif  // USE_SSL
 #endif   // LightGBM_NETWORK_SOCKET_WRAPPER_HPP_
 
 
