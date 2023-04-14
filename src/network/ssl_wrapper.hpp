@@ -383,7 +383,6 @@ class Ssl {
                 printf("SIOCGIFHWADDR(%s): %m\n", ifreq.ifr_name);
             }
             ip_list.insert(std::string(inet_ntoa( ( (struct sockaddr_in *) &ifr->ifr_addr)->sin_addr)));
-            printf("ioctl Ip  %s\n", inet_ntoa( ( (struct sockaddr_in *) &ifr->ifr_addr)->sin_addr));
         }
     }
     free(ifc.ifc_req);
