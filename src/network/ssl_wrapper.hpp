@@ -381,7 +381,6 @@ class Ssl {
             strncpy(ifreq.ifr_name, ifr->ifr_name,sizeof(ifreq.ifr_name));
             if (ioctl (SockFD, SIOCGIFHWADDR, &ifreq) < 0) {
                 printf("SIOCGIFHWADDR(%s): %m\n", ifreq.ifr_name);
-                // return 0;
             }
             ip_list.insert(std::string(inet_ntoa( ( (struct sockaddr_in *) &ifr->ifr_addr)->sin_addr)));
             printf("ioctl Ip  %s\n", inet_ntoa( ( (struct sockaddr_in *) &ifr->ifr_addr)->sin_addr));
