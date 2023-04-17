@@ -368,12 +368,12 @@ class Ssl {
     memset(&ifc, 1, sizeof(ifc));
     ifc.ifc_req = NULL;
     if (ioctl(SockFD, SIOCGIFCONF, &ifc) < 0) {
-        printf("ioctl(SIOCGIFCONF): %m\n");
+        Log::Warning("Getting the list of interface address failed: %m");
     }
     ifc.ifc_req =(struct ifreq*) malloc(ifc.ifc_len);
     struct ifreq *ifs = ifc.ifc_req;
     if (ioctl(SockFD, SIOCGIFCONF, &ifc) < 0) {
-        printf("ioctl(SIOCGIFCONF): %m\n");
+        Log::Warning("Getting the list of interface address failed: %m");
     }
     ifend = ifs + (ifc.ifc_len / sizeof(struct ifreq));
     for (ifr = ifc.ifc_req; ifr < ifend; ifr++) {
