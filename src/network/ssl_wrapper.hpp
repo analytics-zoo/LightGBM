@@ -33,6 +33,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <net/if.h>
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -359,25 +360,33 @@ class Ssl {
 #else
   inline static std::unordered_set<std::string> GetLocalIpList() {
     std::unordered_set<std::string> ip_list;
-    struct ifaddrs * ifAddrStruct = NULL;
-    struct ifaddrs * ifa = NULL;
-    void * tmpAddrPtr = NULL;
-
-    getifaddrs(&ifAddrStruct);
-
-    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
-      if (!ifa->ifa_addr) {
-        continue;
-      }
-      if (ifa->ifa_addr->sa_family == AF_INET) {
-        // NOLINTNEXTLINE
-        tmpAddrPtr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-        char addressBuffer[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-        ip_list.insert(std::string(addressBuffer));
-      }
+    int SockFD;
+    SockFD = socket(AF_INET, SOCK_DGRAM, 0);
+    struct ifreq *ifr, *ifend;
+    struct ifreq ifreq;
+    struct ifconf ifc;
+    memset(&ifc, 1, sizeof(ifc));
+    ifc.ifc_req = NULL;
+    if (ioctl(SockFD, SIOCGIFCONF, &ifc) < 0) {
+        Log::Warning("Getting the list of interface address failed: %m");
     }
-    if (ifAddrStruct != NULL) freeifaddrs(ifAddrStruct);
+    ifc.ifc_req =(struct ifreq*) malloc(ifc.ifc_len);
+    struct ifreq *ifs = ifc.ifc_req;
+    if (ioctl(SockFD, SIOCGIFCONF, &ifc) < 0) {
+        Log::Warning("Getting the list of interface address failed: %m");
+    }
+    ifend = ifs + (ifc.ifc_len / sizeof(struct ifreq));
+    for (ifr = ifc.ifc_req; ifr < ifend; ifr++) {
+        if (ifr->ifr_addr.sa_family == AF_INET) {
+            strncpy(ifreq.ifr_name, ifr->ifr_name,sizeof(ifreq.ifr_name));
+            if (ioctl (SockFD, SIOCGIFHWADDR, &ifreq) < 0) {
+                printf("SIOCGIFHWADDR(%s): %m\n", ifreq.ifr_name);
+            }
+            ip_list.insert(std::string(inet_ntoa( ( (struct sockaddr_in *) &ifr->ifr_addr)->sin_addr)));
+        }
+    }
+    free(ifc.ifc_req);
+
     return ip_list;
   }
 #endif
